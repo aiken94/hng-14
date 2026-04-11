@@ -3,9 +3,16 @@
 use Illuminate\Http\JsonResponse;
 
 if(!function_exists("ea_debugger")){
-    function debugger()
+    function debugger(mixed $data, string $title = "Debugger:"): void
     {
-
+        if(App::environment(['develop', 'local', 'staging'])) {
+            if(is_string($data)){
+                Log::info($title." ".$data);
+            }
+            else {
+                Log::info($title." ", (array) $data);
+            }
+        }
     }
 }
 

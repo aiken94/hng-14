@@ -4,35 +4,34 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Genderize;
-use Exception;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class GenderizeController extends Controller
 {
+    /**
+     * @throws ConnectionException
+     */
     public function classify(Request $request)
     {
-        //$validation = Validator::make($request->all(), [
-        //    "name" => ["required", "string", "max:255"],
-        //]);
+        $name           =   $request->query('name');
 
         if(!$request->has('name')){
             return ea_api_error_response("Missing or empty name parameter");
         }
 
-        if(!is_string($request->query('name'))){
+        if(is_numeric($name) || !$name){
             return ea_api_error_response("name is not a string", 422);
         }
 
         // Genderize the request by calling the api
-        try {
-            $name           =   $request->query('name');
 
-            // instantiate the Genderize API Service
-            $genderize      =   new Genderize($name);
+        // instantiate the Genderize API Service
+        $genderize      =   new Genderize($name);
 
-            $response       =   $genderize->classify();
+        $response       =   $genderize->classify();
 
+        if($response["status"] == "success"){
             // Extracting gender, probability, and count from the API response
             $count          =   $response["count"];
             $gender         =   $response["gender"];
@@ -45,16 +44,17 @@ class GenderizeController extends Controller
             return response()->json([
                 "status"    => "success",
                 "data"      => [
-                    "name"              => $nam,
+                    "name"              => $name,
                     "gender"            => $gender,
                     "probability"       => $probability,
-                    "same_size"         => $count,
-                    "is_confident"      => (bool) $probability >= 0.7 && $count >= 100,
-                    "processed_at"      => now()->tz('UTC'),
+                    "sample_size"       => $count,
+                    "is_confident"      => $probability >= 0.7 && $count >= 100,
+                    "processed_at"      => now()->tz('UTC')
                 ]
             ]);
-        } catch (Exception $exception) {
-            return ea_api_error_response($exception->getMessage(), 500);
+        }
+        else {
+            return ea_api_error_response("Upstream or server failure", 500);
         }
     }
 }
