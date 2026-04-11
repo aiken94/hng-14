@@ -11,7 +11,7 @@ This project provides a RESTful API endpoint that classifies a given name by int
 PHP (Laravel)
 
 ## Base URL
-[http://hng-14.local]http://hng-14.local
+https://hng-14-5b38ef29200d.herokuapp.com
 
 ---
 
