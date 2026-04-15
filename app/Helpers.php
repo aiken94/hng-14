@@ -2,6 +2,10 @@
 
 use Illuminate\Http\JsonResponse;
 
+/****************************************************************
+ * General helpers                                              *
+ ****************************************************************/
+
 if(!function_exists("ea_debugger")){
     function debugger(mixed $data, string $title = "Debugger:"): void
     {
@@ -23,5 +27,15 @@ if(!function_exists("ea_api_error_response")){
             "status"    => "error",
             "message"   => $error,
         ], $code);
+    }
+}
+
+/****************************************************************
+ * Stage 1 helpers                                              *
+ ****************************************************************/
+if (!function_exists("ea_store_profile_clear_cache")) {
+    function ea_store_profile_clear_cache(): void
+    {
+        cache()->forget('profiles-cache');
     }
 }
