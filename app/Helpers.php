@@ -21,12 +21,21 @@ if(!function_exists("ea_debugger")){
 }
 
 if(!function_exists("ea_api_error_response")){
-    function ea_api_error_response(string $error, int $code = 400): JsonResponse
+    function ea_api_error_response(string $error, int $code = 400, $data = null): JsonResponse
     {
+        debugger($data, $error);
+
         return response()->json([
             "status"    => "error",
             "message"   => $error,
         ], $code);
+    }
+}
+
+if (!function_exists("ea_convert_to_2_decimals")) {
+    function ea_convert_to_2_decimals($float): float|int
+    {
+        return number_format(floor($float * 100) / 100, 2);
     }
 }
 
@@ -36,6 +45,6 @@ if(!function_exists("ea_api_error_response")){
 if (!function_exists("ea_store_profile_clear_cache")) {
     function ea_store_profile_clear_cache(): void
     {
-        cache()->forget('profiles-cache');
+        cache()->clear();
     }
 }

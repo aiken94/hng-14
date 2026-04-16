@@ -11,22 +11,12 @@ use Illuminate\Support\Facades\Http;
 
 class Agify
 {
-    private string $base_url = 'https://api.agify.io';
-    private ?string $api_key;
-    private ?array $rate_limits;
+    const string base_url = 'https://api.agify.io';
 
-    public function __construct(public string $name)
-    {
-        $this->api_key  =   config("genderize.apikey");
-    }
-
-    /**
-     * @throws ConnectionException
-     */
-    public function agify($country_id = null): array
+    public static function name($name, $country_id = null): array
     {
         try {
-            $url        =   $this->base_url."?name=".$this->name.($this->api_key ? "&apikey=Elixir.".$this->api_key : null);
+            $url        =   self::base_url."?name=".$name;
 
             if($country_id){
                 $url .= "&country_id=".$country_id;
@@ -36,14 +26,10 @@ class Agify
             $headers    =   $api->headers();
             $body       =   $api->json();
 
-            if($api->ok()){
-                $this->rate_limits  = [
-                    "limit"     =>  $headers["x-rate-limit-limit"],
-                    "remaining" =>  $headers["x-rate-limit-remaining"],
-                    "reset"     =>  $headers["x-rate-limit-reset"],
-                ];
+            debugger($body, "Agify API data:");
 
-                return array_merge($body, ["limits" => $this->rate_limits, "status" => "success"]);
+            if($api->ok()){
+                return $body;
             }
 
             return [
@@ -51,7 +37,7 @@ class Agify
                 "message"   =>  $body["error"]
             ];
         } catch (Exception $exception) {
-            debugger($exception->getMessage(), "Genderize Error:");
+            debugger($exception->getMessage(), "Agify Error:");
 
             return [
                 "status"    => "error",

@@ -20,9 +20,6 @@ class Genderize
         $this->api_key  =   config("genderize.apikey");
     }
 
-    /**
-     * @throws ConnectionException
-     */
     public function classify($country_id = null): array
     {
         try {

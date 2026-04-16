@@ -20,7 +20,7 @@ return new class extends Migration
             $table->integer('age');
             $table->enum('age_group', ['child', 'teenager', 'adult', 'senior'])->default('child');
             $table->string('country_id');
-            $table->float('gender_probability', 2);
+            $table->float('country_probability', 2);
             $table->timestamps();
         });
     }

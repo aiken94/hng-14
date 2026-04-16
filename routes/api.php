@@ -13,8 +13,8 @@ Route::group(['as' => 'genderize.'], function () {
     Route::get('/classify', [GenderizeController::class, 'classify'])->name('classify');
     Route::group(['prefix' => 'profiles', 'as' => 'profiles.'], function () {
         Route::get('/', [ProfileController::class, 'index'])->name('index');
-        Route::post('/', [ProfileController::class, 'index'])->name('store');
-        Route::get('/{id}', [ProfileController::class, 'index'])->name('show');
+        Route::post('/', [ProfileController::class, 'store'])->name('store');
+        Route::get('/{profile}', [ProfileController::class, 'show'])->name('show');
         Route::delete('/{id}', [ProfileController::class, 'destroy'])->name('destroy');
     });
 });
