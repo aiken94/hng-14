@@ -20,17 +20,17 @@ class ProfileController extends Controller
 
             // filter by gender
             if ($gender = $request->query('gender')) {
-                $profile_query->where('gender', $gender);
+                $profile_query->where('gender', '=', strtolower($gender));
             }
 
             // filter by country id if passed through query
             if ($country_id = $request->query('country_id')) {
-                $profile_query->where('country_id', $country_id);
+                $profile_query->where('country_id', '=', strtoupper($country_id));
             }
 
             // filter by age group
             if ($age_group = $request->query('age_group')) {
-                $profile_query->where('age_group', $age_group);
+                $profile_query->where('age_group', '=', strtolower($age_group));
             }
 
             // transform the data from the query to fit response structure
@@ -215,17 +215,17 @@ class ProfileController extends Controller
 
         // filter by gender
         if($gender = $request->query('gender')){
-            $cache_key.=    ':'.$gender;
+            $cache_key.=    ':'.strtolower($gender);
         }
 
         // filter by country id if passed through query
         if($country = $request->query('country_id')){
-            $cache_key.=    ':'.$country;
+            $cache_key.=    ':'.strtoupper($country);
         }
 
         // filter by age group
         if($group = $request->query('age_group')){
-            $cache_key.=    ':'.$group;
+            $cache_key.=    ':'.strtolower($group);
         }
 
         // create the cache
