@@ -84,7 +84,7 @@ class ProfileController extends Controller
         return  response()->json($response);
     }
 
-    public function store(Request $request)
+    public function search(Request $request)
     {
         try {
             if(!$request->has('name')){
