@@ -48,3 +48,43 @@ if (!function_exists("ea_store_profile_clear_cache")) {
         cache()->clear();
     }
 }
+
+/****************************************************************
+ * Stage 2 helpers                                              *
+ ****************************************************************/
+
+if(!function_exists("ea_items_per_page_sg2")){
+    /**
+     * Items to show perPage
+     *
+     * @return int
+     */
+    function ea_items_per_page_sg2(): int
+    {
+        $items  =   request()->query('limit');
+
+        if(is_numeric($items) && $items <= 50){
+            return   $items;
+        }
+
+        return 10;
+    }
+}
+
+if(!function_exists("ea_pagination_attr_sg2")){
+    /**
+     * Custom pagination attributes
+     *
+     * @param $collection
+     * @return array
+     */
+    function ea_pagination_attr_sg2($collection): array
+    {
+        return [
+            'status'    => 'success',
+            'page'      => $collection->currentPage(),
+            'limit'     => $collection->perPage(),
+            'total'     => $collection->total(),
+        ];
+    }
+}

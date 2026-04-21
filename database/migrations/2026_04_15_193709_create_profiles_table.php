@@ -13,15 +13,15 @@ return new class extends Migration
     {
         Schema::create('profiles', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('name');
-            $table->string('gender');
-            $table->float('gender_probability', 2);
-            $table->bigInteger('sample_size')->unsigned();
-            $table->integer('age');
-            $table->enum('age_group', ['child', 'teenager', 'adult', 'senior'])->default('child');
-            $table->string('country_id');
-            $table->float('country_probability', 2);
-            $table->timestamps();
+            $table->string('name')->unique();
+            $table->string('gender')->index();
+            $table->float('gender_probability', 2)->index();
+            $table->integer('age')->index();
+            $table->enum('age_group', ['child', 'teenager', 'adult', 'senior'])->index()->default('child');
+            $table->string('country_id', 2)->index();
+            $table->string('country_name')->index()->nullable();
+            $table->float('country_probability', 2)->index();
+            $table->timestamp('created_at');
         });
     }
 

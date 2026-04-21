@@ -10,4 +10,6 @@ class Profile extends Model
     use HasUuids;
 
     protected $guarded = ['id'];
+
+    public $timestamps = false;
 }

@@ -15,48 +15,73 @@ class ProfileController extends Controller
 {
     public function index(Request $request)
     {
-        if(!($profiles = self::_cache_key($request))) {
+        if(!($response = self::_cache_key($request))) {
             $profile_query = Profile::query();
 
-            // filter by gender
-            if ($gender = $request->query('gender')) {
-                $profile_query->where('gender', '=', strtolower($gender));
-            }
-
-            // filter by country id if passed through query
-            if ($country_id = $request->query('country_id')) {
-                $profile_query->where('country_id', '=', strtoupper($country_id));
-            }
-
-            // filter by age group
-            if ($age_group = $request->query('age_group')) {
-                $profile_query->where('age_group', '=', strtolower($age_group));
-            }
-
-            // transform the data from the query to fit response structure
-            $profiles = $profile_query->get()
-                ->transform(function ($profile) {
-                    return [
-                        "id"            => $profile->id,
-                        "name"          => $profile->name,
-                        "gender"        => $profile->gender,
-                        "age"           => $profile->age,
-                        "age_group"     => $profile->age_group,
-                        "country_id"    => $profile->country_id
-                    ];
+            // apply filters
+            $profile_query
+                // filter by gender
+                ->when($gender = $request->query('gender'), fn ($q) => $q->where('gender', '=', strtolower($gender)))
+                // filter by age group
+                ->when($age_group = $request->query('age_group'), fn ($q) => $profile_query->where('age_group', '=', strtolower($age_group)))
+                // filter by country id if passed through query
+                ->when($country_id = $request->query('country_id'), fn ($q) => $profile_query->where('country_id', '=', strtoupper($country_id)))
+                // filter by min_age and max_age
+                ->when($request->filled('min_age') && $request->filled('max_age'), function ($q) use ($request) {
+                    $q->whereBetween('age', [$request->min_age, $request->max_age]);
+                })
+                // filter by only min_age
+                ->when($request->filled('min_age') && !$request->filled('max_age'), function ($q) use ($request) {
+                    $q->where('age', '>=', $request->min_age);
+                })
+                // filter by only max_age
+                ->when(!$request->filled('min_age') && $request->filled('max_age'), function ($q) use ($request) {
+                    $q->where('age', '<=', $request->max_age);
+                })
+                // filter by min_gender_probability
+                ->when($request->filled('min_gender_probability'), function ($q) use ($request) {
+                    $q->where('gender_probability', '>=', $request->min_gender_probability);
+                })
+                // filter by min_country_probability
+                ->when($request->filled('min_country_probability'), function ($q) use ($request) {
+                    $q->where('country_probability', '>=', $request->min_country_probability);
                 });
+
+            // apply sorters and order
+            $sortable   = in_array(strtolower($request->sort_by), ['age', 'created_at', 'gender_probability']);
+            $orderable  = in_array(strtolower($request->order), ['asc', 'desc']);
+            $profile_query->when($sortable && $orderable, function ($q) use ($request) {
+                $q->orderBy($request->sort_by, $request->order);
+            });
+
+            // paginate and transform the data from the query to fit response structure
+            $profiles   = $profile_query->paginate(ea_items_per_page_sg2());
+
+            $data       = $profiles->transform(function ($profile) {
+                return [
+                    "id"                    => $profile->id,
+                    "name"                  => $profile->name,
+                    "gender"                => $profile->gender,
+                    "gender_probability"    => $profile->gender_probability,
+                    "age"                   => $profile->age,
+                    "age_group"             => $profile->age_group,
+                    "country_id"            => $profile->country_id,
+                    "country_name"          => $profile->country_name,
+                    "country_probability"   => $profile->country_probability,
+                    "created_at"            => $profile->created_at,
+                ];
+            });
 
             // let's cache this results for similar requests
             if($profiles->count()) {
-                self::_cache_key($request, 'set', $profiles);
+                $response   = array_merge(ea_pagination_attr_sg2($profiles), ['data' => $data]);
+
+                // cache the data
+                self::_cache_key($request, 'set', $response);
             }
         }
 
-        return  response()->json([
-            'status'    => 'success',
-            'count'     => $profiles->count(),
-            'data'      => $profiles,
-        ]);
+        return  response()->json($response);
     }
 
     public function store(Request $request)
@@ -215,17 +240,57 @@ class ProfileController extends Controller
 
         // filter by gender
         if($gender = $request->query('gender')){
-            $cache_key.=    ':'.strtolower($gender);
+            $cache_key.=    ':gender-'.strtolower($gender);
         }
 
         // filter by country id if passed through query
         if($country = $request->query('country_id')){
-            $cache_key.=    ':'.strtoupper($country);
+            $cache_key.=    ':iso-'.strtoupper($country);
         }
 
         // filter by age group
         if($group = $request->query('age_group')){
-            $cache_key.=    ':'.strtolower($group);
+            $cache_key.=    ':group-'.strtolower($group);
+        }
+
+        // filter by min_age
+        if($min = $request->query('min_age')){
+            $cache_key.=    ':mia-'.$min;
+        }
+
+        // filter by max_age
+        if($max = $request->query('max_age')){
+            $cache_key.=    ':mxa-'.$max;
+        }
+
+        // filter by min_gender_probability
+        if($mgp = $request->query('min_gender_probability')){
+            $cache_key.=    ':mgp-'.$mgp;
+        }
+
+        // filter by min_country_probability
+        if($mcp = $request->query('min_country_probability')){
+            $cache_key.=    ':mcp-'.$mcp;
+        }
+
+        // pagination page
+        if($page = $request->query('page')){
+            $cache_key.=    ':page-'.$page;
+        }
+
+        // pagination limit
+        if($limit = $request->query('limit')){
+            $cache_key.=    ':limit-'.$limit;
+        }
+
+        // sorter
+        if($sort = $request->query('sort_by')){
+            $cache_key.=    ':sort-'.$sort;
+        }
+
+        // order
+        if($order = $request->query('order')){
+            $cache_key.=    ':order-'.$order;
         }
 
         // create the cache
