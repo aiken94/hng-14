@@ -66,7 +66,7 @@ Response Code `200`
 }
 ```
 
-- ## Natural Language
+- ## Search
 `GET` /api/profiles/search
 
 Query Parameters
