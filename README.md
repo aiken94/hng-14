@@ -6,17 +6,16 @@ This project provides a RESTful API endpoint that classifies a given name by int
 
 ---
 
-
 ## LANGUAGE
 PHP (Laravel)
 
 ## Base URL
 https://hng-14-5b38ef29200d.herokuapp.com
 
-## THIRD-PARTY APIs
-- [https://agify.io](Agify)
-- [https://genderize.io](Genderize)
-- [https://nationalize.io](Nationalize)
+
+# Endpoints
+
+---
 
 - ## Profiles
 `GET` /api/profiles
@@ -44,6 +43,41 @@ Example:
 
 Response Code `200`
 
+```json
+{
+    "status": "success",
+    "page": 1,
+    "limit": 10,
+    "total": 2026,
+    "data": [
+        {
+            "id": "b3f9c1e2-7d4a-4c91-9c2a-1f0a8e5b6d12",
+            "name": "emmanuel",
+            "gender": "male",
+            "gender_probability": 0.99,
+            "age": 34,
+            "age_group": "adult",
+            "country_id": "NG",
+            "country_name": "Nigeria",
+            "country_probability": 0.85,
+            "created_at": "2026-04-01T12:00:00Z"
+        }
+    ]
+}
+```
+
+- ## Natural Language
+`GET` /api/profiles/search
+
+Query Parameters
+- q `string`
+- page `int` default `1`
+- limit `int` default `10` maximum `50`
+
+Example:
+`/api/profiles/search?q=young males from nigeria`
+
+Response Code `200`
 ```json
 {
     "status": "success",
@@ -100,6 +134,16 @@ Returns 204 No Content on success.
   "message": "Missing or empty name parameter"
 }
 ```
+
+- **Status Code:** `404`
+
+```json
+{
+  "status": "error",
+  "message": "Profile not found"
+}
+```
+
 - **Status Code:** `422`
 
 ```json

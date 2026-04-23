@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 /****************************************************************
  * General helpers                                              *
@@ -86,5 +87,15 @@ if(!function_exists("ea_pagination_attr_sg2")){
             'limit'     => $collection->perPage(),
             'total'     => $collection->total(),
         ];
+    }
+}
+
+if(!function_exists('ea_get_countries_sg2')){
+    function ea_get_countries_sg2(): Collection
+    {
+        return App\Models\Profile::query()
+            ->select('country_id', 'country_name')
+            ->distinct()
+            ->pluck('country_name', 'country_id');
     }
 }

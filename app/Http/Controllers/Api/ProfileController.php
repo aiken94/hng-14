@@ -4,10 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Profile;
-use App\Services\Agify;
-use App\Services\Genderize;
-use App\Services\Nationalize;
-use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -54,31 +50,7 @@ class ProfileController extends Controller
                 $q->orderBy($request->sort_by, $request->order);
             });
 
-            // paginate and transform the data from the query to fit response structure
-            $profiles   = $profile_query->paginate(ea_items_per_page_sg2());
-
-            $data       = $profiles->transform(function ($profile) {
-                return [
-                    "id"                    => $profile->id,
-                    "name"                  => $profile->name,
-                    "gender"                => $profile->gender,
-                    "gender_probability"    => $profile->gender_probability,
-                    "age"                   => $profile->age,
-                    "age_group"             => $profile->age_group,
-                    "country_id"            => $profile->country_id,
-                    "country_name"          => $profile->country_name,
-                    "country_probability"   => $profile->country_probability,
-                    "created_at"            => $profile->created_at,
-                ];
-            });
-
-            // let's cache this results for similar requests
-            if($profiles->count()) {
-                $response   = array_merge(ea_pagination_attr_sg2($profiles), ['data' => $data]);
-
-                // cache the data
-                self::_cache_key($request, 'set', $response);
-            }
+            $response = self::_profile_query_results($profile_query, $request);
         }
 
         return  response()->json($response);
@@ -86,100 +58,112 @@ class ProfileController extends Controller
 
     public function search(Request $request)
     {
-        try {
-            if(!$request->has('name')){
-                return ea_api_error_response("Missing or empty name parameter");
-            }
-
-            $name           =   $request->string('name');
-
-            // no existing record was found create it
-            if(is_numeric($name) || !$name){
-                return ea_api_error_response("name is not a string", 422);
-            }
-
-            // check whether the name already exists then return it
-            if($profile = Profile::query()->where('name', '=', $name)->first()) {
-                return $this->show($profile, message: 'Profile already exists');
-            }
-
-            // instantiate the Genderize API Service
-            $genderize      =   new Genderize($name);
-            $genderize      =   $genderize->classify();
-
-            // instantiate the Agify API Service
-            $agify          =   Agify::name($name);
-
-            // instantiate the Nationalize Service
-            $nationalize    =   Nationalize::name($name);
-
-            if(count($agify) && $genderize["status"] == "success" && count($nationalize)){
-                // Extract the API response data from Agify, Genderize & Nationalize
-                $count          =   $genderize["count"];
-                $gender         =   $genderize["gender"];
-                $probability    =   $genderize["probability"];
-                $age            =   $agify["age"];
-                $country        =   $nationalize["country"] ?? [];
-
-                // did we get an age value from agify api
-                if(!is_numeric($age)){
-                    return ea_api_error_response("Agify returned an invalid response", 502);
-                }
-
-                // gender and count value are required from genderize
-                if(!$gender || !$count){
-                    return ea_api_error_response("Genderize returned an invalid response", 502);
-                }
-
-                // country data must be returned
-                if(!count($country)){
-                    return ea_api_error_response("Nationalize returned an invalid response", 502);
-                }
-
-                // group the agify data into child, teenage, adult or senior
-                $age_group      =   match (true){
-                    $age >= 0 && $age <= 12   =>  "child",
-                    $age >= 13 && $age <= 19  =>  "teenager",
-                    $age >= 20 && $age <= 59  =>  "adult",
-                    default                   =>  "senior",
-                };
-
-                // pick the country with the highest probability from nationalization
-                $country_id     =   collect($country)
-                    ->sortByDesc('probability')
-                    ->values()
-                    ->first();
-
-                // we will clear the /profiles cache time a new store request is made
-                ea_store_profile_clear_cache();
-
-                $profile    = Profile::query()
-                    ->create([
-                        "name"                  => $name,
-                        "gender"                => $gender,
-                        "gender_probability"    => $probability,
-                        "sample_size"           => $count,
-                        "age"                   => $age,
-                        "age_group"             => $age_group,
-                        "country_id"            => $country_id['country_id'],
-                        "country_probability"   => ea_convert_to_2_decimals($country_id['probability'])
-                    ]);
-
-                // cache the data immediately for show()
-
-                return $this->show($profile, 201);
-            }
-            else {
-                return ea_api_error_response("Upstream failure", 502);
-            }
-        }catch (Exception $exception){
-            return ea_api_error_response($exception->getMessage(), 500);
+        // valid query parameter
+        if(!$request->has('q')){
+            return ea_api_error_response("Missing or empty parameter");
         }
+
+        $q = strtolower(trim($request->query('q')));
+
+        // non string error
+        if(is_numeric($q) || !$q){
+            return ea_api_error_response("Invalid parameter type", 422);
+        }
+
+        $plain_english_filters =   [
+            "young males",
+            "females above 30",
+            "people from angola",
+            "adult males from kenya",
+            "male and female teenagers above 17",
+        ];
+
+        // search did not match plain english
+        if(!in_array($q, $plain_english_filters)){
+            return ea_api_error_response("Unable to interpret query");
+        }
+
+        if(!($response = self::_cache_key($request))) {
+            $query = Profile::query();
+
+            // get and set request gender
+            $genders = [];
+
+            if (str_contains($q, 'male')) {
+                $genders[] = 'male';
+            }
+
+            if (str_contains($q, 'female')) {
+                $genders[] = 'female';
+            }
+
+            if (!empty($genders)) {
+                $query->whereIn('gender', $genders);
+            }
+
+            // country filter
+            ea_get_countries_sg2()
+                ->each(function($country, $code) use ($q, $query) {
+                    if(str_contains($q, strtolower($country))) {
+                        $query->where('country_name', '=', ucfirst($country));
+                    }
+                });
+
+            // age grouping detection
+            if (str_contains($q, 'child')) {
+                $query->where('age_group', 'child');
+            }
+
+            if (str_contains($q, 'teen') || str_contains($q, 'teenager')) {
+                $query->where('age_group', 'teenager');
+            }
+
+            if (str_contains($q, 'adult')) {
+                $query->where('age_group', 'adult');
+            }
+
+            if (str_contains($q, 'senior')) {
+                $query->where('age_group', 'senior');
+            }
+
+            // age range modifier
+
+            // above / over ages
+            if (preg_match('/(above|over)\s+(\d+)/', $q, $match)) {
+                $query->where('age', '>', (int) $match[2]);
+            }
+
+            // below / under ages
+            if (preg_match('/(below|under)\s+(\d+)/', $q, $match)) {
+                $query->where('age', '<', (int) $match[2]);
+            }
+
+            // between X and Y ages
+            if (preg_match('/between\s+(\d+)\s+and\s+(\d+)/', $q, $match)) {
+                $query->whereBetween('age', [(int) $match[1], (int) $match[2]]);
+            }
+
+            // old profiles
+            if (str_contains($q, 'old')) {
+                $query->where('age', '>', 24);
+            }
+
+            // young profiles
+            if (str_contains($q, 'young')) {
+                $query->whereBetween('age', [16, 24]);
+            }
+
+            $response  = self::_profile_query_results($query, $request);
+        }
+
+        return  response()->json($response);
     }
 
-    public function show(Profile $profile, $response_code = 200, ?string $message = null)
+    public function show($id, $response_code = 200, ?string $message = null)
     {
-        if(!$profile->exists){
+        $profile    =   Profile::find($id);
+
+        if(!$profile){
             return ea_api_error_response('Profile not found', 404);
         }
 
@@ -199,10 +183,10 @@ class ProfileController extends Controller
                 "name"                  => $profile_data->name,
                 "gender"                => $profile_data->gender,
                 "gender_probability"    => $profile_data->gender_probability,
-                "sample_size"           => $profile_data->sample_size,
                 "age"                   => $profile_data->age,
                 "age_group"             => $profile_data->age_group,
                 "country_id"            => $profile_data->country_id,
+                "country_name"          => $profile_data->country_name,
                 "country_probability"   => $profile_data->country_probability,
                 "created_at"            => $profile_data->created_at
             ]
@@ -211,26 +195,6 @@ class ProfileController extends Controller
         $data   =   array_filter($structure, fn($value) => !is_null($value));
 
         return response()->json($data, $response_code);
-    }
-
-    public function destroy($id)
-    {
-        // find the profile
-        $profile    =   Profile::query()
-            ->find($id);
-
-        // throw a 404 error response
-        if(!$profile){
-            return ea_api_error_response('Profile not found', 404);
-        }
-
-        // clear the cache store
-        ea_store_profile_clear_cache();
-
-        // delete the profile
-        $profile->delete();
-
-        return response()->json([], 204);
     }
 
     private static function _cache_key($request, string $type = 'get', mixed $data = [])
@@ -293,6 +257,11 @@ class ProfileController extends Controller
             $cache_key.=    ':order-'.$order;
         }
 
+        // search
+        if($q = $request->query('q')){
+            $cache_key.=    ':q-'.str_replace(' ', '', $q);
+        }
+
         // create the cache
         if($type == 'set'){
             Cache::remember($cache_key, now()->addDay(), fn() => $data);
@@ -301,5 +270,38 @@ class ProfileController extends Controller
         }
 
         return Cache::get($cache_key);
+    }
+
+    private static function _profile_query_results($profile_query, Request $request)
+    {
+        // paginate and transform the data from the query to fit response structure
+        $profiles   = $profile_query->paginate(ea_items_per_page_sg2());
+
+        $response   = ea_pagination_attr_sg2($profiles);
+
+        $data       = $profiles->transform(function ($profile) {
+            return [
+                "id"                    => $profile->id,
+                "name"                  => $profile->name,
+                "gender"                => $profile->gender,
+                "gender_probability"    => $profile->gender_probability,
+                "age"                   => $profile->age,
+                "age_group"             => $profile->age_group,
+                "country_id"            => $profile->country_id,
+                "country_name"          => $profile->country_name,
+                "country_probability"   => $profile->country_probability,
+                "created_at"            => $profile->created_at,
+            ];
+        });
+
+        // let's cache this results for similar requests
+        if($profiles->count()) {
+            $response   = array_merge($response, ['data' => $data]);
+
+            // cache the data
+            self::_cache_key($request, 'set', $response);
+        }
+
+        return $response;
     }
 }
